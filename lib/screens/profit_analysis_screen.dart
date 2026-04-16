@@ -147,7 +147,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.accentWarm.withOpacity(0.12),
+              color: AppTheme.accentWarm.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Text('💰', style: TextStyle(fontSize: 20)),
@@ -227,7 +227,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                     horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
                   color: selected
-                      ? AppTheme.accentWarm.withOpacity(0.15)
+                      ? AppTheme.accentWarm.withValues(alpha: 0.15)
                       : AppTheme.card,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
@@ -278,7 +278,6 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
         ),
         const SizedBox(height: 12),
         ...crops.asMap().entries.map((e) {
-          final i = e.key;
           final crop = e.value;
           final isSelected = _selectedCrop?.cropName == crop.cropName;
           return Padding(
@@ -290,12 +289,12 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? AppTheme.accentWarm.withOpacity(0.08)
+                      ? AppTheme.accentWarm.withValues(alpha: 0.08)
                       : AppTheme.card,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isSelected
-                        ? AppTheme.accentWarm.withOpacity(0.5)
+                        ? AppTheme.accentWarm.withValues(alpha: 0.5)
                         : AppTheme.border,
                     width: isSelected ? 1.5 : 1,
                   ),
@@ -399,13 +398,13 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                AppTheme.accentWarm.withOpacity(0.12),
+                AppTheme.accentWarm.withValues(alpha: 0.12),
                 AppTheme.card,
               ],
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-                color: AppTheme.accentWarm.withOpacity(0.3), width: 1.5),
+                color: AppTheme.accentWarm.withValues(alpha: 0.3), width: 1.5),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,9 +486,9 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
       ),
       child: Column(
         children: [
@@ -527,7 +526,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
               padding:
                   const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: AppTheme.accentPurple.withOpacity(0.12),
+                color: AppTheme.accentPurple.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
@@ -560,7 +559,7 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
                   color: AppTheme.card,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                      color: AppTheme.accentPurple.withOpacity(0.2),
+                      color: AppTheme.accentPurple.withValues(alpha: 0.2),
                       width: 1),
                 ),
                 child: Row(

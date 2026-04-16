@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
 import '../services/agro_service.dart';
+import '../services/crop_prediction_service.dart';
 import '../models/models.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   WeatherData? _weather;
   List<WeatherAlert> _activeAlerts = [];
+  CropPrediction? _recommendedCrop;
   bool _loading = true;
   late AnimationController _headerCtrl;
   late Animation<Offset> _headerSlide;
@@ -34,10 +36,23 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _loadData() async {
     final weather = await AgroService.fetchCurrentWeather(30.7, 76.7);
     final alerts = await AgroService.fetchSmartAlerts(30.7, 76.7);
+    CropPrediction? pred;
+    try {
+      pred = await CropPredictionService.predictCrop(
+        temperature: weather.temperature,
+        humidity: weather.humidity.toDouble(),
+        ph: 6.5,
+        rainfall: weather.rainfall.toDouble(),
+      );
+    } catch (e) {
+      // Handle error implicitly by leaving pred as null
+    }
+
     if (mounted) {
       setState(() {
         _weather = weather;
         _activeAlerts = alerts.where((a) => a.isActive).toList();
+        _recommendedCrop = pred;
         _loading = false;
       });
       _headerCtrl.forward();
@@ -69,6 +84,7 @@ class _HomeScreenState extends State<HomeScreen>
         children: [
           _buildHeader(),
           _buildWeatherCard(),
+          if (_recommendedCrop != null) _buildWeatherBasedRecommendation(),
           if (_activeAlerts.isNotEmpty) _buildAlertBanner(),
           _buildQuickActions(),
           _buildSeasonInfo(),
@@ -130,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: AppTheme.accent.withOpacity(0.4), width: 2),
+                    color: AppTheme.accent.withValues(alpha: 0.4), width: 2),
               ),
               child: CircleAvatar(
                 radius: 22,
@@ -155,13 +171,13 @@ class _HomeScreenState extends State<HomeScreen>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              AppTheme.accentCool.withOpacity(0.18),
-              AppTheme.accent.withOpacity(0.08),
+              AppTheme.accentCool.withValues(alpha: 0.18),
+              AppTheme.accent.withValues(alpha: 0.08),
             ],
           ),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: AppTheme.accentCool.withOpacity(0.25), width: 1),
+              color: AppTheme.accentCool.withValues(alpha: 0.25), width: 1),
         ),
         child: Column(
           children: [
@@ -243,16 +259,93 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  Widget _buildWeatherBasedRecommendation() {
+    final rec = _recommendedCrop!;
+    final pct = (rec.confidence * 100).toInt();
+    
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.accent.withValues(alpha: 0.25), width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded, color: AppTheme.accent, size: 16),
+                const SizedBox(width: 8),
+                const Text(
+                  'Recommended for current weather',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(rec.emoji, style: const TextStyle(fontSize: 32)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        rec.cropName,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ConfidenceBar(value: rec.confidence, color: AppTheme.accent, height: 6),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '\$pct%',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.accent,
+                                ),
+                              ),
+                              const Text('Success Rate', style: TextStyle(fontSize: 9, color: AppTheme.textMuted)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAlertBanner() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: AppTheme.accentRed.withOpacity(0.1),
+          color: AppTheme.accentRed.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: AppTheme.accentRed.withOpacity(0.35), width: 1),
+              color: AppTheme.accentRed.withValues(alpha: 0.35), width: 1),
         ),
         child: Row(
           children: [
@@ -332,7 +425,7 @@ class _HomeScreenState extends State<HomeScreen>
                       color: AppTheme.card,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: color.withOpacity(0.2), width: 1),
+                          color: color.withValues(alpha: 0.2), width: 1),
                     ),
                     child: Column(
                       children: [
@@ -378,7 +471,7 @@ class _HomeScreenState extends State<HomeScreen>
               color: AppTheme.card,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                  color: AppTheme.accent.withOpacity(0.15), width: 1),
+                  color: AppTheme.accent.withValues(alpha: 0.15), width: 1),
             ),
             child: Column(
               children: [

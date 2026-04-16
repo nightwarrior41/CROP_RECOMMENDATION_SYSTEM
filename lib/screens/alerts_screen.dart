@@ -142,11 +142,11 @@ class _AlertsScreenState extends State<AlertsScreen>
                     horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
                   color: AppTheme.accentRed
-                      .withOpacity(0.1 + 0.1 * _pulseCtrl.value),
+                      .withValues(alpha: 0.1 + 0.1 * _pulseCtrl.value),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: AppTheme.accentRed
-                        .withOpacity(0.3 + 0.2 * _pulseCtrl.value),
+                        .withValues(alpha: 0.3 + 0.2 * _pulseCtrl.value),
                     width: 1.5,
                   ),
                 ),
@@ -210,14 +210,14 @@ class _AlertsScreenState extends State<AlertsScreen>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              color.withOpacity(0.15 + 0.05 * _pulseCtrl.value),
+              color.withValues(alpha: 0.15 + 0.05 * _pulseCtrl.value),
               AppTheme.card,
             ],
           ),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: color
-                .withOpacity(0.4 + 0.15 * _pulseCtrl.value),
+                .withValues(alpha: 0.4 + 0.15 * _pulseCtrl.value),
             width: 1.5,
           ),
         ),
@@ -256,7 +256,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.15),
+                          color: color.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -322,9 +322,9 @@ class _AlertsScreenState extends State<AlertsScreen>
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.25), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.25), width: 1),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -459,7 +459,7 @@ class _AlertsScreenState extends State<AlertsScreen>
       decoration: BoxDecoration(
         color: AppTheme.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
       ),
       child: Row(
         children: [
@@ -467,7 +467,7 @@ class _AlertsScreenState extends State<AlertsScreen>
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
@@ -501,9 +501,9 @@ class _AlertsScreenState extends State<AlertsScreen>
             padding:
                 const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: color.withOpacity(0.25)),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
             ),
             child: Text(
               _severityLabel(alert.severity),
@@ -566,7 +566,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                       width: 34,
                       height: 34,
                       decoration: BoxDecoration(
-                        color: AppTheme.accent.withOpacity(0.1),
+                        color: AppTheme.accent.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Center(

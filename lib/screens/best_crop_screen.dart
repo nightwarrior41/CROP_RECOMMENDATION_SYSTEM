@@ -130,7 +130,7 @@ class _BestCropScreenState extends State<BestCropScreen>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.accentPurple.withOpacity(0.12),
+              color: AppTheme.accentPurple.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Text('⭐', style: TextStyle(fontSize: 20)),
@@ -148,13 +148,13 @@ class _BestCropScreenState extends State<BestCropScreen>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.accentPurple.withOpacity(0.12),
+            AppTheme.accentPurple.withValues(alpha: 0.12),
             AppTheme.card,
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color: AppTheme.accentPurple.withOpacity(0.25), width: 1),
+            color: AppTheme.accentPurple.withValues(alpha: 0.25), width: 1),
       ),
       child: Row(
         children: [
@@ -264,13 +264,13 @@ class _BestCropScreenState extends State<BestCropScreen>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                AppTheme.accentPurple.withOpacity(0.2),
-                AppTheme.accent.withOpacity(0.2),
+                AppTheme.accentPurple.withValues(alpha: 0.2),
+                AppTheme.accent.withValues(alpha: 0.2),
               ],
             ),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-                color: AppTheme.accentPurple.withOpacity(0.4), width: 1),
+                color: AppTheme.accentPurple.withValues(alpha: 0.4), width: 1),
           ),
           child: const Text(
             '🤖 ML Recommendation',
@@ -314,12 +314,12 @@ class _BestCropScreenState extends State<BestCropScreen>
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? color.withOpacity(0.08)
+                      ? color.withValues(alpha: 0.08)
                       : AppTheme.card,
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: isSelected
-                        ? color.withOpacity(0.5)
+                        ? color.withValues(alpha: 0.5)
                         : AppTheme.border,
                     width: isSelected ? 1.5 : 1,
                   ),
@@ -415,7 +415,7 @@ class _BestCropScreenState extends State<BestCropScreen>
             decoration: BoxDecoration(
               color: AppTheme.card,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: color.withOpacity(0.2), width: 1),
+              border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -530,9 +530,9 @@ class _BestCropScreenState extends State<BestCropScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
+        color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.15), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.15), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

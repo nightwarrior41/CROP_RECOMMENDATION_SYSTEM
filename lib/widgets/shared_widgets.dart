@@ -48,7 +48,7 @@ class StatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -57,7 +57,7 @@ class StatCard extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -135,12 +135,13 @@ class SectionHeader extends StatelessWidget {
                   letterSpacing: -0.3,
                 ),
               ),
-              if (subtitle != null)
+              if (subtitle != null) {
                 Text(
                   subtitle!,
                   style: const TextStyle(
                       fontSize: 12, color: AppTheme.textMuted),
-                ),
+                );
+              }
             ],
           ),
         ),
@@ -206,7 +207,7 @@ class _LoadingOverlayState extends State<LoadingOverlay>
                   shape: BoxShape.circle,
                   gradient: SweepGradient(
                     colors: [
-                      AppTheme.accent.withOpacity(0),
+                      AppTheme.accent.withValues(alpha: 0),
                       AppTheme.accent,
                     ],
                   ),
@@ -288,7 +289,7 @@ class _ConfidenceBarState extends State<ConfidenceBar>
         borderRadius: BorderRadius.circular(999),
         child: LinearProgressIndicator(
           value: widget.value * _anim.value,
-          backgroundColor: widget.color.withOpacity(0.12),
+          backgroundColor: widget.color.withValues(alpha: 0.12),
           valueColor: AlwaysStoppedAnimation(widget.color),
           minHeight: widget.height,
         ),
@@ -349,8 +350,11 @@ class _RadarPainter extends CustomPainter {
       for (int i = 0; i <= n; i++) {
         final a = -math.pi / 2 + i * angle;
         final pt = Offset(center.dx + r * math.cos(a), center.dy + r * math.sin(a));
-        if (i == 0) path.moveTo(pt.dx, pt.dy);
-        else path.lineTo(pt.dx, pt.dy);
+        if (i == 0) {
+          path.moveTo(pt.dx, pt.dy);
+        } else {
+          path.lineTo(pt.dx, pt.dy);
+        }
       }
       path.close();
       canvas.drawPath(path, gridPaint);
@@ -366,7 +370,7 @@ class _RadarPainter extends CustomPainter {
 
     // Filled polygon
     final fillPaint = Paint()
-      ..color = color.withOpacity(0.18)
+      ..color = color.withValues(alpha: 0.18)
       ..style = PaintingStyle.fill;
     final strokePaint = Paint()
       ..color = color
@@ -378,8 +382,11 @@ class _RadarPainter extends CustomPainter {
       final a = -math.pi / 2 + (i % n) * angle;
       final r = radius * values[i % n];
       final pt = Offset(center.dx + r * math.cos(a), center.dy + r * math.sin(a));
-      if (i == 0) path.moveTo(pt.dx, pt.dy);
-      else path.lineTo(pt.dx, pt.dy);
+      if (i == 0) {
+        path.moveTo(pt.dx, pt.dy);
+      } else {
+        path.lineTo(pt.dx, pt.dy);
+      }
     }
     path.close();
     canvas.drawPath(path, fillPaint);
@@ -444,7 +451,7 @@ class MiniBarChart extends StatelessWidget {
                   curve: Curves.easeOutCubic,
                   height: 60 * normalized,
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.2 + 0.6 * normalized),
+                    color: color.withValues(alpha: 0.2 + 0.6 * normalized),
                     borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(3)),
                   ),

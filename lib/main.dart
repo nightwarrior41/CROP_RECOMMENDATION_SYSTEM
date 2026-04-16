@@ -105,7 +105,7 @@ class _MainNavigatorState extends State<MainNavigator>
       decoration: BoxDecoration(
         color: AppTheme.navBg,
         border: Border(
-          top: BorderSide(color: AppTheme.accent.withOpacity(0.15), width: 1),
+          top: BorderSide(color: AppTheme.accent.withValues(alpha: 0.15), width: 1),
         ),
       ),
       child: SafeArea(
@@ -123,7 +123,7 @@ class _MainNavigatorState extends State<MainNavigator>
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppTheme.accent.withOpacity(0.15)
+                        ? AppTheme.accent.withValues(alpha: 0.15)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(14),
                   ),

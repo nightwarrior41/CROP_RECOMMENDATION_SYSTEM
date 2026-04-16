@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
-import '../services/agro_service.dart';
+import '../services/crop_prediction_service.dart';
 import '../models/models.dart';
 
 class CropPredictionScreen extends StatefulWidget {
@@ -13,20 +13,16 @@ class CropPredictionScreen extends StatefulWidget {
 
 class _CropPredictionScreenState extends State<CropPredictionScreen>
     with TickerProviderStateMixin {
-  List<CropPrediction> _predictions = [];
+  
+  final TextEditingController _tempCtrl = TextEditingController();
+  final TextEditingController _humCtrl = TextEditingController();
+  final TextEditingController _phCtrl = TextEditingController();
+  final TextEditingController _rainCtrl = TextEditingController();
+
+  CropPrediction? _prediction;
   bool _loading = false;
   bool _hasResult = false;
-  String _selectedLandType = 'Loam';
   late AnimationController _listCtrl;
-
-  final List<String> _landTypes = [
-    'Loam', 'Clay', 'Sandy', 'Silt', 'Black', 'Alluvial', 'Red'
-  ];
-
-  // Simulated GPS
-  final double _lat = 30.7333;
-  final double _lon = 76.7794;
-  final String _locationName = 'Punjab, India';
 
   @override
   void initState() {
@@ -37,25 +33,67 @@ class _CropPredictionScreenState extends State<CropPredictionScreen>
 
   @override
   void dispose() {
+    _tempCtrl.dispose();
+    _humCtrl.dispose();
+    _phCtrl.dispose();
+    _rainCtrl.dispose();
     _listCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _runPrediction() async {
+    // Validate inputs
+    if (_tempCtrl.text.isEmpty || _humCtrl.text.isEmpty || 
+        _phCtrl.text.isEmpty || _rainCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill all environmental inputs')),
+      );
+      return;
+    }
+
+    final double? temp = double.tryParse(_tempCtrl.text);
+    final double? hum = double.tryParse(_humCtrl.text);
+    final double? ph = double.tryParse(_phCtrl.text);
+    final double? rain = double.tryParse(_rainCtrl.text);
+
+    if (temp == null || hum == null || ph == null || rain == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter valid numerical values')),
+      );
+      return;
+    }
+
     setState(() {
       _loading = true;
       _hasResult = false;
     });
-    final results =
-        await AgroService.predictCrops(_lat, _lon, _selectedLandType);
-    if (mounted) {
-      setState(() {
-        _predictions = results;
-        _loading = false;
-        _hasResult = true;
-      });
-      _listCtrl.reset();
-      _listCtrl.forward();
+
+    try {
+      final result = await CropPredictionService.predictCrop(
+        temperature: temp,
+        humidity: hum,
+        ph: ph,
+        rainfall: rain,
+      );
+      
+      if (mounted) {
+        setState(() {
+          _prediction = result;
+          _loading = false;
+          _hasResult = true;
+        });
+        _listCtrl.reset();
+        _listCtrl.forward();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     }
   }
 
@@ -76,16 +114,14 @@ class _CropPredictionScreenState extends State<CropPredictionScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildLocationCard(),
-                          const SizedBox(height: 20),
-                          _buildLandTypeSelector(),
+                          _buildInputForm(),
                           const SizedBox(height: 20),
                           _buildPredictButton(),
-                          if (_hasResult) ...[
+                          if (_hasResult && _prediction != null) ...[
                             const SizedBox(height: 24),
                             _buildResultHeader(),
                             const SizedBox(height: 14),
-                            ..._buildPredictionCards(),
+                            _buildPredictionCard(),
                           ],
                         ],
                       ),
@@ -116,7 +152,7 @@ class _CropPredictionScreenState extends State<CropPredictionScreen>
                   ),
                 ),
                 Text(
-                  'AI-powered weather pattern analysis',
+                  'Enter environmental factors',
                   style: TextStyle(
                       fontSize: 13, color: AppTheme.textMuted),
                 ),
@@ -126,7 +162,7 @@ class _CropPredictionScreenState extends State<CropPredictionScreen>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.12),
+              color: AppTheme.accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Text('🌱', style: TextStyle(fontSize: 20)),
@@ -136,143 +172,74 @@ class _CropPredictionScreenState extends State<CropPredictionScreen>
     );
   }
 
-  Widget _buildLocationCard() {
+  Widget _buildInputForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildInputField(
+          label: 'Temperature (°C)',
+          controller: _tempCtrl,
+          icon: Icons.thermostat_rounded,
+          hint: 'e.g. 25.5',
+        ),
+        const SizedBox(height: 12),
+        _buildInputField(
+          label: 'Humidity (%)',
+          controller: _humCtrl,
+          icon: Icons.water_drop_rounded,
+          hint: 'e.g. 71.0',
+        ),
+        const SizedBox(height: 12),
+        _buildInputField(
+          label: 'Soil pH',
+          controller: _phCtrl,
+          icon: Icons.science_rounded,
+          hint: 'e.g. 6.5',
+        ),
+        const SizedBox(height: 12),
+        _buildInputField(
+          label: 'Rainfall (mm)',
+          controller: _rainCtrl,
+          icon: Icons.cloud_rounded,
+          hint: 'e.g. 100.0',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInputField({
+    required String label,
+    required TextEditingController controller,
+    required IconData icon,
+    required String hint,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: AppTheme.accentCool.withOpacity(0.25), width: 1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppTheme.accentCool.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.gps_fixed_rounded,
-                color: AppTheme.accentCool, size: 20),
-          ),
-          const SizedBox(width: 14),
+          Icon(icon, color: AppTheme.accentCool, size: 22),
+          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: const BoxDecoration(
-                          color: AppTheme.accent, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'GPS Location Active',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.accent,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _locationName,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                Text(
-                  '${_lat.toStringAsFixed(4)}°N, ${_lon.toStringAsFixed(4)}°E',
-                  style: const TextStyle(
-                      fontSize: 11, color: AppTheme.textMuted),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.accentCool.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                  color: AppTheme.accentCool.withOpacity(0.3), width: 1),
-            ),
-            child: const Text(
-              'Refresh',
-              style: TextStyle(
-                fontSize: 11,
-                color: AppTheme.accentCool,
-                fontWeight: FontWeight.w600,
+            child: TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                labelText: label,
+                labelStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                hintText: hint,
+                hintStyle: TextStyle(color: AppTheme.textMuted.withValues(alpha: 0.5), fontSize: 13),
               ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildLandTypeSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Select Land Type',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _landTypes.map((type) {
-            final selected = type == _selectedLandType;
-            return GestureDetector(
-              onTap: () => setState(() => _selectedLandType = type),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppTheme.accent.withOpacity(0.15)
-                      : AppTheme.card,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected
-                        ? AppTheme.accent
-                        : AppTheme.border,
-                    width: selected ? 1.5 : 1,
-                  ),
-                ),
-                child: Text(
-                  type,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: selected
-                        ? FontWeight.w700
-                        : FontWeight.w500,
-                    color: selected
-                        ? AppTheme.accent
-                        : AppTheme.textSecondary,
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
     );
   }
 
@@ -291,7 +258,7 @@ class _CropPredictionScreenState extends State<CropPredictionScreen>
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.accent.withOpacity(0.3),
+              color: AppTheme.accent.withValues(alpha: 0.3),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -327,7 +294,7 @@ class _CropPredictionScreenState extends State<CropPredictionScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: AppTheme.accent.withOpacity(0.12),
+                color: AppTheme.accent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
@@ -341,15 +308,15 @@ class _CropPredictionScreenState extends State<CropPredictionScreen>
             ),
             const SizedBox(width: 10),
             const Text(
-              'Based on current weather data',
+              'Based on Random Forest model',
               style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        Text(
-          '${_predictions.length} crops suitable for your land',
-          style: const TextStyle(
+        const Text(
+          'Best suitable crop for your condition',
+          style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
             color: AppTheme.textPrimary,
@@ -360,24 +327,20 @@ class _CropPredictionScreenState extends State<CropPredictionScreen>
     );
   }
 
-  List<Widget> _buildPredictionCards() {
-    return List.generate(_predictions.length, (i) {
-      final crop = _predictions[i];
-      final delay = i * 0.15;
-      return TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
-        duration: Duration(milliseconds: 400 + (i * 80)),
-        curve: Curves.easeOutCubic,
-        builder: (_, v, child) => Transform.translate(
-          offset: Offset(0, 20 * (1 - v)),
-          child: Opacity(opacity: v, child: child),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: _PredictionCard(crop: crop, rank: i + 1),
-        ),
-      );
-    });
+  Widget _buildPredictionCard() {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+      builder: (_, v, child) => Transform.translate(
+        offset: Offset(0, 20 * (1 - v)),
+        child: Opacity(opacity: v, child: child),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: _PredictionCard(crop: _prediction!, rank: 1),
+      ),
+    );
   }
 }
 
@@ -395,16 +358,7 @@ class _PredictionCardState extends State<_PredictionCard> {
   bool _expanded = false;
 
   Color get _rankColor {
-    switch (widget.rank) {
-      case 1:
-        return AppTheme.accent;
-      case 2:
-        return AppTheme.accentWarm;
-      case 3:
-        return AppTheme.accentCool;
-      default:
-        return AppTheme.textMuted;
-    }
+    return AppTheme.accent;
   }
 
   @override
@@ -420,7 +374,7 @@ class _PredictionCardState extends State<_PredictionCard> {
           color: AppTheme.card,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-              color: _rankColor.withOpacity(0.2), width: 1),
+              color: _rankColor.withValues(alpha: 0.2), width: 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,11 +404,11 @@ class _PredictionCardState extends State<_PredictionCard> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: _rankColor.withOpacity(0.12),
+                              color: _rankColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              '#${widget.rank}',
+                              '#\${widget.rank}',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
@@ -476,7 +430,7 @@ class _PredictionCardState extends State<_PredictionCard> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '$pct%',
+                      '\$pct%',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
@@ -498,7 +452,7 @@ class _PredictionCardState extends State<_PredictionCard> {
             const SizedBox(height: 12),
             Row(
               children: [
-                _infoChip('🌾', '${crop.expectedYield}t/ha'),
+                _infoChip('🌾', '\${crop.expectedYield}t/ha'),
                 const SizedBox(width: 8),
                 _infoChip('🪨', crop.soilType),
               ],
