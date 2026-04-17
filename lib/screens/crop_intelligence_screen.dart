@@ -3,6 +3,10 @@ import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
 import '../services/agro_service.dart';
 import '../models/models.dart';
+import '../services/crop_prediction_service.dart';
+import '../services/location_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class CropIntelligenceScreen extends StatefulWidget {
   final int initialTab;
@@ -17,9 +21,11 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
   late TabController _tabController;
 
   // --- Common Data ---
-  final double _lat = 30.7333;
-  final double _lon = 76.7794;
-  final String _locationName = 'Punjab, India';
+  double _lat = 30.7333;
+  double _lon = 76.7794;
+  String _locationName = 'Punjab, India';
+  Map<String, dynamic>? _weatherAnalysis;
+  bool _isDataLoaded = false;
 
   // --- Prediction Tab Data ---
   List<CropPrediction> _predictions = [];
@@ -58,7 +64,7 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
     _recsRadarAnim =
         CurvedAnimation(parent: _recsRadarCtrl, curve: Curves.easeOutCubic);
 
-    _loadBestCropData();
+    _initIntelligenceData();
   }
 
   @override
@@ -72,35 +78,87 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
 
   // --- Prediction Logic ---
   Future<void> _runQuickPrediction() async {
+    if (!_isDataLoaded || _weatherAnalysis == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please wait for location and weather data to sync...')),
+      );
+      return;
+    }
+
     setState(() {
       _predictLoading = true;
       _predictHasResult = false;
     });
-    final results =
-        await AgroService.predictCrops(_lat, _lon, _selectedLandType);
-    if (mounted) {
-      setState(() {
-        _predictions = results;
-        _predictLoading = false;
-        _predictHasResult = true;
-      });
-      _predictListCtrl.reset();
-      _predictListCtrl.forward();
+
+    try {
+      final results = await CropPredictionService.predictCrop(
+        temperature: (_weatherAnalysis!['avg_temp'] as num).toDouble(),
+        humidity: (_weatherAnalysis!['avg_humidity'] as num).toDouble(),
+        rainfall: (_weatherAnalysis!['total_rainfall'] as num).toDouble(),
+      );
+      if (mounted) {
+        setState(() {
+          _predictions = results;
+          _predictLoading = false;
+          _predictHasResult = true;
+        });
+        _predictListCtrl.reset();
+        _predictListCtrl.forward();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _predictLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to get predictions: \$e')),
+        );
+      }
     }
   }
 
   // --- Best Crop Logic ---
-  Future<void> _loadBestCropData() async {
-    final recs = await AgroService.getBestCropRecommendations(_lat, _lon);
-    final hist = await AgroService.fetchHistoricalWeather(_lat, _lon);
-    if (mounted) {
-      setState(() {
-        _recs = recs;
-        _historicalData = hist;
-        _recsLoading = false;
-      });
-      _recsCardCtrl.forward();
-      _recsRadarCtrl.forward();
+  // --- Data & Location Initialization ---
+  Future<void> _initIntelligenceData() async {
+    final locationService = LocationService();
+    Position? pos;
+    String? localPlace;
+
+    try {
+      pos = await locationService.getCurrentLocation();
+      final placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
+      if (placemarks.isNotEmpty) {
+        final p = placemarks.first;
+        localPlace = '${p.locality}, ${p.administrativeArea}';
+      }
+    } catch (e) {
+      debugPrint('Location error: \$e');
+    }
+
+    final lat = pos?.latitude ?? _lat;
+    final lon = pos?.longitude ?? _lon;
+
+    try {
+      final analysis = await CropPredictionService.fetchWeatherAnalysis(lat, lon);
+      if (mounted) {
+        setState(() {
+          _lat = lat;
+          _lon = lon;
+          _locationName = localPlace ?? 'Unknown Location';
+          _weatherAnalysis = analysis;
+          _isDataLoaded = true;
+          _recsLoading = false;
+        });
+        _recsCardCtrl.forward();
+        _recsRadarCtrl.forward();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _recsLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sync Error: \$e')),
+        );
+      }
     }
   }
 
@@ -445,31 +503,37 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
     });
   }
 
-  // --- TAB 2: BEST CROP ---
+  // --- TAB 2: DEEP ANALYSIS (METEOSTAT) ---
   Widget _buildBestCropTab() {
-    return _recsLoading
-        ? const LoadingOverlay(message: 'Analyzing 10+ years of weather data...')
-        : SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildAnalysisInfo(),
-                const SizedBox(height: 20),
-                _buildHistoricalChart(),
-                const SizedBox(height: 24),
-                _buildTopPickLabel(),
-                const SizedBox(height: 14),
-                _buildRecommendationCards(),
-                const SizedBox(height: 24),
-                if (_recs.isNotEmpty) _buildDetailPanel(),
-              ],
-            ),
-          );
+    if (!_isDataLoaded || _weatherAnalysis == null) {
+      return const LoadingOverlay(message: 'Connecting to Meteostat services...');
+    }
+
+    final history = _weatherAnalysis!['history'] as List;
+    final List<double> rainValues = history.map((h) => (h['rainfall'] as num).toDouble()).toList();
+    final List<String> rainLabels = history.map((h) => h['date'] as String).toList();
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildAnalysisInfo(),
+          const SizedBox(height: 20),
+          _buildHistoricalChart(rainValues, rainLabels),
+          const SizedBox(height: 24),
+          _buildDataInsightCard(),
+        ],
+      ),
+    );
   }
 
   Widget _buildAnalysisInfo() {
+    final avgTemp = _weatherAnalysis?['avg_temp'] ?? 0.0;
+    final totalRain = _weatherAnalysis?['total_rainfall'] ?? 0.0;
+    final avgHum = _weatherAnalysis?['avg_humidity'] ?? 0.0;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -488,13 +552,12 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
       child: Row(
         children: [
           Expanded(
-            child: _recsInfoChip(
-                '📅', '${_historicalData.length} Years', 'Data Range'),
+            child: _recsInfoChip('📅', 'Past 90 Days', 'Data Period'),
           ),
           Container(width: 1, height: 40, color: AppTheme.border),
-          Expanded(child: _recsInfoChip('🌡️', '24.8°C', 'Avg Temp')),
+          Expanded(child: _recsInfoChip('🌡️', '\$avgTemp°C', 'Avg Temp')),
           Container(width: 1, height: 40, color: AppTheme.border),
-          Expanded(child: _recsInfoChip('🌧️', '1020mm', 'Avg Rain')),
+          Expanded(child: _recsInfoChip('🌧️', '\${totalRain}mm', 'Total Rain')),
         ],
       ),
     );
@@ -519,13 +582,15 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
     );
   }
 
-  Widget _buildHistoricalChart() {
+  Widget _buildHistoricalChart(List<double> values, List<String> labels) {
+    if (values.isEmpty) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionHeader(
-          title: 'Historical Rainfall Pattern',
-          subtitle: '12-year analysis used for ML training',
+          title: 'Meteostat Historical Rainfall',
+          subtitle: 'Daily precipitation patterns (Last 3 Months)',
         ),
         const SizedBox(height: 14),
         Container(
@@ -538,12 +603,10 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
           child: Column(
             children: [
               SizedBox(
-                height: 80,
+                height: 100,
                 child: MiniBarChart(
-                  values: _historicalData.map((h) => h.totalRainfall).toList(),
-                  labels: _historicalData
-                      .map((h) => h.year.toString().substring(2))
-                      .toList(),
+                  values: values,
+                  labels: labels,
                   color: AppTheme.accentCool,
                 ),
               ),
@@ -552,7 +615,10 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
                 children: [
                   _legendDot(AppTheme.accentCool, 'Rainfall (mm)'),
                   const SizedBox(width: 16),
-                  _legendDot(AppTheme.accentWarm, 'Temperature °C'),
+                  const Text(
+                    'Data sourced from local weather stations via Meteostat',
+                    style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                  ),
                 ],
               ),
             ],
@@ -562,17 +628,38 @@ class _CropIntelligenceScreenState extends State<CropIntelligenceScreen>
     );
   }
 
-  Widget _legendDot(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: color)),
-        const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-      ],
+  Widget _buildDataInsightCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.accentCool.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.accentCool.withValues(alpha: 0.2)),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.insights_rounded, color: AppTheme.accentCool, size: 20),
+              SizedBox(width: 10),
+              Text(
+                'Climate Insights',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          Text(
+            'The historical weather pattern from the last 90 days is used to generate stable averages for the ML prediction model, ensuring that recommendations are based on recent regional trends.',
+            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.5),
+          ),
+        ],
+      ),
     );
   }
 

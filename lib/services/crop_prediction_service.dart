@@ -10,10 +10,24 @@ class CropPredictionService {
   // Replace with your Render URL (e.g., 'https://agro-api.onrender.com') when deployed
   static String baseUrl = 'http://10.0.2.2:8000';
 
-  static Future<CropPrediction> predictCrop({
+  static Future<Map<String, dynamic>> fetchWeatherAnalysis(double lat, double lon) async {
+    final url = Uri.parse('$baseUrl/weather-analysis?lat=$lat&lon=$lon');
+    
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Server error: \${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Weather Analysis failed: \$e');
+    }
+  }
+
+  static Future<List<CropPrediction>> predictCrop({
     required double temperature,
     required double humidity,
-    required double ph,
     required double rainfall,
   }) async {
     final url = Uri.parse('$baseUrl/predict');
@@ -25,31 +39,35 @@ class CropPredictionService {
         body: jsonEncode({
           'temperature': temperature,
           'humidity': humidity,
-          'ph': ph,
           'rainfall': rainfall,
         }),
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        String cropNameStr = data['crop'] as String;
-        // Capitalize for display
-        String cropTitle = "\${cropNameStr[0].toUpperCase()}\${cropNameStr.substring(1)}";
+        final predictionsList = data['predictions'] as List;
         
-        return CropPrediction(
-          cropName: cropTitle,
-          confidence: (data['confidence'] as num).toDouble(),
-          emoji: _getEmojiForCrop(cropNameStr),
-          season: 'All Season (Based on current inputs)',
-          expectedYield: 4.5, // Dummy average
-          requirements: [
-             'Temp: \${temperature.toStringAsFixed(1)}°C',
-             'Humidity: \${humidity.toStringAsFixed(1)}%',
-             'pH Level: \${ph.toStringAsFixed(1)}',
-             'Rainfall: \${rainfall.toStringAsFixed(1)}mm'
-          ],
-          soilType: _getSoilForPH(ph),
-        );
+        List<CropPrediction> results = [];
+        for (var pred in predictionsList) {
+          String cropNameStr = pred['crop'] as String;
+          // Capitalize for display
+          String cropTitle = "\${cropNameStr[0].toUpperCase()}\${cropNameStr.substring(1)}";
+          
+          results.add(CropPrediction(
+            cropName: cropTitle,
+            confidence: (pred['confidence'] as num).toDouble(),
+            emoji: _getEmojiForCrop(cropNameStr),
+            season: 'All Season (Based on current inputs)',
+            expectedYield: 4.5, // Dummy average
+            requirements: [
+               'Temp: \${temperature.toStringAsFixed(1)}°C',
+               'Humidity: \${humidity.toStringAsFixed(1)}%',
+               'Rainfall: \${rainfall.toStringAsFixed(1)}mm'
+            ],
+            soilType: 'Loam/Varied',
+          ));
+        }
+        return results;
       } else {
         // Handling FastAPI validation or custom errors
         final errorData = jsonDecode(response.body);
@@ -90,9 +108,4 @@ class CropPredictionService {
     return '🌿';
   }
 
-  static String _getSoilForPH(double ph) {
-    if (ph < 5.5) return 'Acidic Soil';
-    if (ph > 7.5) return 'Alkaline Soil';
-    return 'Neutral/Loam';
-  }
 }

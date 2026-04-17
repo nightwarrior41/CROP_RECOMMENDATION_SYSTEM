@@ -80,13 +80,16 @@ class _HomeScreenState extends State<HomeScreen>
     final weather = await AgroService.fetchCurrentWeather(lat, lon);
     final alerts = await AgroService.fetchSmartAlerts(lat, lon);
     CropPrediction? pred;
+    List<CropPrediction> preds = [];
     try {
-      pred = await CropPredictionService.predictCrop(
+      preds = await CropPredictionService.predictCrop(
         temperature: weather.temperature,
         humidity: weather.humidity.toDouble(),
-        ph: 6.5,
         rainfall: weather.rainfall.toDouble(),
       );
+      if (preds.isNotEmpty) {
+        pred = preds.first;
+      }
     } catch (e) {
       // Handle error implicitly by leaving pred as null
     }

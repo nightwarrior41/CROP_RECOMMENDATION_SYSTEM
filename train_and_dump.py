@@ -4,8 +4,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 import joblib
 
-dataset = pd.read_csv(r'c:\Users\LENOVO\Crop-APP\Crop_recommendation.csv')
-X = dataset[['temperature', 'humidity', 'ph', 'rainfall']]
+dataset = pd.read_csv('Crop_recommendation.csv')
+X = dataset[['temperature', 'humidity', 'rainfall']]
 y = dataset['label']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
@@ -22,5 +22,6 @@ grid_search = GridSearchCV(estimator=RandomForestClassifier(random_state=42),
 grid_search.fit(X_train, y_train)
 
 best_model = grid_search.best_estimator_
-joblib.dump(best_model, r'c:\Users\LENOVO\Crop-APP\crop_model.pkl')
-print("Model saved successfully as crop_model.pkl")
+joblib.dump(best_model, 'backend/crop_model.pkl')
+joblib.dump(best_model, 'crop_model.pkl') # Save a copy here just in case
+print("Model saved successfully as backend/crop_model.pkl")
