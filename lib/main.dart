@@ -4,10 +4,12 @@ import 'package:agro_intelligence/screens/home_screen.dart';
 import 'package:agro_intelligence/screens/crop_intelligence_screen.dart';
 import 'package:agro_intelligence/screens/profit_analysis_screen.dart';
 import 'package:agro_intelligence/screens/alerts_screen.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:agro_intelligence/theme/app_theme.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,

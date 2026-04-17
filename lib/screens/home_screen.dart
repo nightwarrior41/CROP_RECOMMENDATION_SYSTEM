@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import '../services/location_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
 import '../services/agro_service.dart';
 import '../services/crop_prediction_service.dart';
 import '../models/models.dart';
+import 'weather_screen.dart';
+import '../services/weather_service.dart';
+import '../models/weather_model.dart';
+
 
 class HomeScreen extends StatefulWidget {
   final Function(int, {int? subTab})? onNavigate;
@@ -18,6 +25,9 @@ class _HomeScreenState extends State<HomeScreen>
   WeatherData? _weather;
   List<WeatherAlert> _activeAlerts = [];
   CropPrediction? _recommendedCrop;
+  Position? _currentPosition;
+  String? _locality;
+  WeatherModel? _realWeather;
   bool _loading = true;
   late AnimationController _headerCtrl;
   late Animation<Offset> _headerSlide;
@@ -35,8 +45,40 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _loadData() async {
-    final weather = await AgroService.fetchCurrentWeather(30.7, 76.7);
-    final alerts = await AgroService.fetchSmartAlerts(30.7, 76.7);
+    final locationService = LocationService();
+    Position? pos;
+    String? localPlace;
+    try {
+      pos = await locationService.getCurrentLocation();
+      final placemarks =
+          await placemarkFromCoordinates(pos.latitude, pos.longitude);
+      if (placemarks.isNotEmpty) {
+        final p = placemarks.first;
+        localPlace = '${p.locality}, ${p.administrativeArea}';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Location error: $e'),
+              backgroundColor: AppTheme.accentRed),
+        );
+      }
+    }
+
+    final lat = pos?.latitude ?? 30.7;
+    final lon = pos?.longitude ?? 76.7;
+
+    final weatherService = WeatherService();
+    WeatherModel? realWeather;
+    try {
+      realWeather = await weatherService.fetchWeather(lat, lon);
+    } catch (e) {
+      // Sliently fail for real weather on home, UI will handle null
+    }
+
+    final weather = await AgroService.fetchCurrentWeather(lat, lon);
+    final alerts = await AgroService.fetchSmartAlerts(lat, lon);
     CropPrediction? pred;
     try {
       pred = await CropPredictionService.predictCrop(
@@ -51,7 +93,10 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (mounted) {
       setState(() {
+        _currentPosition = pos;
+        _locality = localPlace;
         _weather = weather;
+        _realWeather = realWeather;
         _activeAlerts = alerts.where((a) => a.isActive).toList();
         _recommendedCrop = pred;
         _loading = false;
@@ -88,6 +133,7 @@ class _HomeScreenState extends State<HomeScreen>
           if (_recommendedCrop != null) _buildWeatherBasedRecommendation(),
           if (_activeAlerts.isNotEmpty) _buildAlertBanner(),
           _buildQuickActions(),
+          _buildSeasonInfo(),
           const SizedBox(height: 24),
         ],
       ),
@@ -189,33 +235,72 @@ class _HomeScreenState extends State<HomeScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${w.temperature.toStringAsFixed(1)}°C',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                          letterSpacing: -1,
+                      if (_realWeather != null) ...[
+                        Row(
+                          children: [
+                            Image.network(_realWeather!.iconUrl, width: 32, height: 32),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${_realWeather!.temperature.toStringAsFixed(1)}°C',
+                              style: const TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.textPrimary,
+                                letterSpacing: -1,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      Text(
-                        w.condition,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textSecondary,
-                          fontWeight: FontWeight.w500,
+                        Text(
+                          _realWeather!.description.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.accent,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                          ),
                         ),
-                      ),
+                      ] else ...[
+                        Text(
+                          '${w.temperature.toStringAsFixed(1)}°C',
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textPrimary,
+                            letterSpacing: -1,
+                          ),
+                        ),
+                        Text(
+                          w.condition,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 4),
                       Row(
                         children: [
                           const Icon(Icons.location_on_rounded,
                               size: 12, color: AppTheme.accentCool),
                           const SizedBox(width: 3),
                           Text(
-                            w.location,
+                            _locality ?? w.location,
                             style: const TextStyle(
                                 fontSize: 12, color: AppTheme.textMuted),
                           ),
+                          if (_currentPosition != null) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              '(${_currentPosition!.latitude.toStringAsFixed(2)}, ${_currentPosition!.longitude.toStringAsFixed(2)})',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: AppTheme.accentCool
+                                      .withValues(alpha: 0.8),
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
                         ],
                       ),
                     ],
@@ -231,10 +316,38 @@ class _HomeScreenState extends State<HomeScreen>
                 _weatherDetail('💨', '${w.windSpeed}km/h', 'Wind'),
               ],
             ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const WeatherScreen()),
+                  );
+                },
+                icon: const Icon(Icons.info_outline_rounded, size: 16, color: AppTheme.accentCool),
+                label: const Text(
+                  'VIEW DETAILED WEATHER',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                    color: AppTheme.accentCool,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  backgroundColor: AppTheme.accentCool.withValues(alpha: 0.1),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
+
   }
 
   Widget _weatherDetail(String icon, String value, String label) {
@@ -258,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildWeatherBasedRecommendation() {
     final rec = _recommendedCrop!;
     final pct = (rec.confidence * 100).toInt();
-    
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       child: Container(
@@ -266,18 +379,23 @@ class _HomeScreenState extends State<HomeScreen>
         decoration: BoxDecoration(
           color: AppTheme.card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.accent.withValues(alpha: 0.25), width: 1.5),
+          border: Border.all(
+              color: AppTheme.accent.withValues(alpha: 0.25), width: 1.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
-                const Icon(Icons.auto_awesome_rounded, color: AppTheme.accent, size: 16),
-                const SizedBox(width: 8),
-                const Text(
+                Icon(Icons.auto_awesome_rounded,
+                    color: AppTheme.accent, size: 16),
+                SizedBox(width: 8),
+                Text(
                   'Recommended for current weather',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textMuted,
+                      fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -302,21 +420,26 @@ class _HomeScreenState extends State<HomeScreen>
                       Row(
                         children: [
                           Expanded(
-                            child: ConfidenceBar(value: rec.confidence, color: AppTheme.accent, height: 6),
+                            child: ConfidenceBar(
+                                value: rec.confidence,
+                                color: AppTheme.accent,
+                                height: 6),
                           ),
                           const SizedBox(width: 12),
-                          Column(
+                          const Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
                                 '\$pct%',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w800,
                                   color: AppTheme.accent,
                                 ),
                               ),
-                              const Text('Success Rate', style: TextStyle(fontSize: 9, color: AppTheme.textMuted)),
+                              Text('Success Rate',
+                                  style: TextStyle(
+                                      fontSize: 9, color: AppTheme.textMuted)),
                             ],
                           ),
                         ],
@@ -420,8 +543,8 @@ class _HomeScreenState extends State<HomeScreen>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: GestureDetector(
-                    onTap: () => widget.onNavigate?.call(a['tab'] as int,
-                        subTab: a['subTab'] as int?),
+                    onTap: () => widget.onNavigate
+                        ?.call(a['tab'] as int, subTab: a['subTab'] as int?),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           vertical: 16, horizontal: 8),
@@ -450,11 +573,6 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                     ),
                   ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 ),
               );
             }).toList(),
@@ -463,6 +581,7 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
   }
+
   Widget _buildSeasonInfo() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
@@ -516,7 +635,8 @@ class _HomeScreenState extends State<HomeScreen>
                       color: AppTheme.textPrimary)),
             ),
             Text(detail,
-                style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                style:
+                    const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
           ],
         ),
         const SizedBox(height: 6),
