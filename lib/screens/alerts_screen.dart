@@ -3,6 +3,10 @@ import '../theme/app_theme.dart';
 import '../widgets/shared_widgets.dart';
 import '../services/agro_service.dart';
 import '../models/models.dart';
+import '../services/location_service.dart';
+import '../services/weather_service.dart';
+import '../models/weather_model.dart';
+import 'package:geolocator/geolocator.dart';
 
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
@@ -34,12 +38,35 @@ class _AlertsScreenState extends State<AlertsScreen>
   }
 
   Future<void> _loadData() async {
-    final alerts = await AgroService.fetchSmartAlerts(30.7, 76.7);
-    if (mounted) {
-      setState(() {
-        _alerts = alerts;
-        _loading = false;
-      });
+    final locationService = LocationService();
+    final weatherService = WeatherService();
+    
+    try {
+      final Position pos = await locationService.getCurrentLocation();
+      final weather = await weatherService.fetchWeather(pos.latitude, pos.longitude);
+      final alerts = weatherService.generateSmartAlerts(weather);
+      
+      if (mounted) {
+        setState(() {
+          _alerts = alerts;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      // Fallback to mock data if API fails
+      final alerts = await AgroService.fetchSmartAlerts(30.7, 76.7);
+      if (mounted) {
+        setState(() {
+          _alerts = alerts;
+          _loading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Using predicted alerts (Live API error: $e)'),
+            backgroundColor: AppTheme.accentWarm,
+          ),
+        );
+      }
     }
   }
 
