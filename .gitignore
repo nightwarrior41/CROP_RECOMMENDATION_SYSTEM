@@ -47,3 +47,4 @@ app.*.map.json
 # Environment variables
 .env
 
+CROP_RECOMMENDATION_SYSTEM/
