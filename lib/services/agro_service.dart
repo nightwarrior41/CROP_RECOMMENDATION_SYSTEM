@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../models/models.dart';
 
 /// Simulates the ML backend + Weather API service.
@@ -94,95 +96,49 @@ class AgroService {
 
   // ── Profit Analysis ───────────────────────────────────────────────────────
 
-  static Future<List<CropProfit>> fetchCropProfits() async {
-    await Future.delayed(const Duration(milliseconds: 900));
-    return const [
-      CropProfit(
-        cropName: 'Wheat',
-        emoji: '🌾',
-        profitPerHectare: 1240,
-        marketPrice: 280,
-        productionCost: 920,
-        growthPercent: 8.4,
-        category: 'Cereal',
-        monthlyData: [
-          MonthlyProfit('Jan', 300), MonthlyProfit('Feb', 420),
-          MonthlyProfit('Mar', 900), MonthlyProfit('Apr', 1200),
-          MonthlyProfit('May', 1100), MonthlyProfit('Jun', 800),
-          MonthlyProfit('Jul', 600), MonthlyProfit('Aug', 500),
-          MonthlyProfit('Sep', 550), MonthlyProfit('Oct', 200),
-          MonthlyProfit('Nov', 180), MonthlyProfit('Dec', 220),
-        ],
-      ),
-      CropProfit(
-        cropName: 'Tomato',
-        emoji: '🍅',
-        profitPerHectare: 3800,
-        marketPrice: 650,
-        productionCost: 2400,
-        growthPercent: 22.1,
-        category: 'Vegetable',
-        monthlyData: [
-          MonthlyProfit('Jan', 900), MonthlyProfit('Feb', 1200),
-          MonthlyProfit('Mar', 2200), MonthlyProfit('Apr', 3800),
-          MonthlyProfit('May', 3200), MonthlyProfit('Jun', 2100),
-          MonthlyProfit('Jul', 1400), MonthlyProfit('Aug', 1200),
-          MonthlyProfit('Sep', 1600), MonthlyProfit('Oct', 2200),
-          MonthlyProfit('Nov', 1800), MonthlyProfit('Dec', 1100),
-        ],
-      ),
-      CropProfit(
-        cropName: 'Rice',
-        emoji: '🌿',
-        profitPerHectare: 1680,
-        marketPrice: 320,
-        productionCost: 1200,
-        growthPercent: 5.2,
-        category: 'Cereal',
-        monthlyData: [
-          MonthlyProfit('Jan', 400), MonthlyProfit('Feb', 380),
-          MonthlyProfit('Mar', 350), MonthlyProfit('Apr', 420),
-          MonthlyProfit('May', 680), MonthlyProfit('Jun', 1100),
-          MonthlyProfit('Jul', 1680), MonthlyProfit('Aug', 1500),
-          MonthlyProfit('Sep', 1200), MonthlyProfit('Oct', 900),
-          MonthlyProfit('Nov', 600), MonthlyProfit('Dec', 450),
-        ],
-      ),
-      CropProfit(
-        cropName: 'Saffron',
-        emoji: '🌺',
-        profitPerHectare: 14500,
-        marketPrice: 3200,
-        productionCost: 6800,
-        growthPercent: 31.7,
-        category: 'Spice',
-        monthlyData: [
-          MonthlyProfit('Jan', 2400), MonthlyProfit('Feb', 2100),
-          MonthlyProfit('Mar', 1800), MonthlyProfit('Apr', 1400),
-          MonthlyProfit('May', 900), MonthlyProfit('Jun', 700),
-          MonthlyProfit('Jul', 800), MonthlyProfit('Aug', 1200),
-          MonthlyProfit('Sep', 3200), MonthlyProfit('Oct', 14500),
-          MonthlyProfit('Nov', 8200), MonthlyProfit('Dec', 3400),
-        ],
-      ),
-      CropProfit(
-        cropName: 'Maize',
-        emoji: '🌽',
-        profitPerHectare: 890,
-        marketPrice: 180,
-        productionCost: 680,
-        growthPercent: 3.8,
-        category: 'Cereal',
-        monthlyData: [
-          MonthlyProfit('Jan', 200), MonthlyProfit('Feb', 220),
-          MonthlyProfit('Mar', 300), MonthlyProfit('Apr', 450),
-          MonthlyProfit('May', 700), MonthlyProfit('Jun', 890),
-          MonthlyProfit('Jul', 820), MonthlyProfit('Aug', 700),
-          MonthlyProfit('Sep', 600), MonthlyProfit('Oct', 400),
-          MonthlyProfit('Nov', 280), MonthlyProfit('Dec', 220),
-        ],
-      ),
-    ];
+  static Future<List<CropProfit>> fetchCropProfits({
+    double temp = 25.0, 
+    double hum = 70.0, 
+    double rain = 100.0, 
+    String soilType = "Loam"
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:8000/recommend-crops'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "temperature": temp,
+          "humidity": hum,
+          "rainfall": rain,
+          "soil_type": soilType,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List ranking = data['ranking'] ?? [];
+        
+        return ranking.map((item) {
+          return CropProfit(
+            cropName: item['cropName'],
+            emoji: item['emoji'],
+            profitPerHectare: (item['profitPerHectare'] as num).toDouble(),
+            marketPrice: (item['marketPrice'] as num).toDouble(),
+            productionCost: (item['productionCost'] as num).toDouble(),
+            growthPercent: (item['growthPercent'] as num).toDouble(),
+            category: item['category'],
+            monthlyData: (item['monthlyData'] as List).map((m) => 
+               MonthlyProfit(m['month'], (m['profit'] as num).toDouble())
+            ).toList(),
+          );
+        }).toList();
+      } else {
+        throw Exception('Failed to load crop profits ML API: \${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching profits: \$e');
+      throw Exception('Could not fetch ML profit predictions. Please ensure FastAPI backend is running.');
+    }
   }
 
   // ── Best Crop Recommendation (ML over 10yr data) ─────────────────────────

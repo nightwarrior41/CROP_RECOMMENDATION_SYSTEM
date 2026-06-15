@@ -1,13 +1,21 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import joblib
 import pandas as pd
 import os
+import json
 from datetime import datetime, timedelta
 from meteostat import Point, daily
+from sqlalchemy.orm import Session
 
-app = FastAPI(title="Agro Intelligence Crop Prediction API")
+from database import engine, get_db
+import db_models
+
+# Create DB tables
+db_models.Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="Agro Intelligence API")
 
 # Configure CORS
 app.add_middleware(
@@ -18,15 +26,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load the model at startup
+# --- Load Models ---
+# 1. Classification Model
 model_path = os.path.join(os.path.dirname(__file__), "crop_model.pkl")
-
 try:
     model = joblib.load(model_path)
 except Exception as e:
     model = None
     print(f"Warning: Could not load the model from {model_path}. Error: {e}")
 
+# 2. Profit Regressor Model
+profit_model_path = os.path.join(os.path.dirname(__file__), "profit_model.pkl")
+try:
+    profit_data = joblib.load(profit_model_path)
+    profit_model = profit_data['model']
+    profit_features = profit_data['features']
+except Exception as e:
+    profit_model = None
+    profit_features = None
+    print(f"Warning: Could not load the profit model from {profit_model_path}. Error: {e}")
+
+
+# --- Schemas ---
 class CropInput(BaseModel):
     temperature: float = Field(..., ge=-10, le=60, description="Temperature in Celsius")
     humidity: float = Field(..., ge=0, le=100, description="Humidity percentage")
@@ -36,7 +57,12 @@ class CropInput(BaseModel):
     potassium: float = Field(..., ge=0, le=200, description="Potassium content")
     ph: float = Field(..., ge=3, le=10, description="Soil pH value")
 
-# Database of ideal conditions for each crop (means from dataset)
+class ProfitPredictInput(BaseModel):
+    temperature: float
+    humidity: float
+    rainfall: float
+    soil_type: str = "Loam"
+
 CROP_IDEALS = {
     "apple": {"N": 20.8, "P": 134.22, "K": 199.89, "temp": 22.63, "hum": 92.33, "ph": 5.93, "rain": 112.65},
     "banana": {"N": 100.23, "P": 82.01, "K": 50.05, "temp": 27.38, "hum": 80.36, "ph": 5.98, "rain": 104.63},
@@ -59,8 +85,42 @@ CROP_IDEALS = {
     "pigeonpeas": {"N": 20.73, "P": 67.73, "K": 20.29, "temp": 27.74, "hum": 48.06, "ph": 5.79, "rain": 149.46},
     "pomegranate": {"N": 18.87, "P": 18.75, "K": 40.21, "temp": 21.84, "hum": 90.13, "ph": 6.43, "rain": 107.53},
     "rice": {"N": 79.89, "P": 47.58, "K": 39.87, "temp": 23.69, "hum": 82.27, "ph": 6.43, "rain": 236.18},
-    "watermelon": {"N": 99.42, "P": 17.0, "K": 50.22, "temp": 25.59, "hum": 85.16, "ph": 6.5, "rain": 50.79}
+    "watermelon": {"N": 99.42, "P": 17.0, "K": 50.22, "temp": 25.59, "hum": 85.16, "ph": 6.5, "rain": 50.79},
+    "tomato": {"N": 50, "P": 50, "K": 50, "temp": 25, "hum": 70, "ph": 6.0, "rain": 100},
+    "saffron": {"N": 20, "P": 20, "K": 20, "temp": 15, "hum": 40, "ph": 7.0, "rain": 40},
 }
+
+
+SUPPORTED_CROPS = list(CROP_IDEALS.keys())
+
+def generate_monthly_distribution(annual_profit: float) -> list:
+    # A simple pseudo-seasonal distribution curve
+    dist = [0.03, 0.04, 0.07, 0.12, 0.18, 0.15, 0.12, 0.08, 0.07, 0.06, 0.05, 0.03]
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return [{"month": m, "profit": int(annual_profit * d)} for m, d in zip(months, dist)]
+
+def get_crop_category(crop: str) -> str:
+    cereal = ["rice", "wheat", "maize"]
+    vegetable = ["tomato", "potato"]
+    spice = ["saffron", "chickpea"]
+    fruit = ["apple", "banana", "coconut", "grapes", "mango", "muskmelon", "orange", "papaya", "pomegranate", "watermelon"]
+    
+    if crop in cereal: return "Cereal"
+    if crop in vegetable: return "Vegetable"
+    if crop in spice: return "Spice"
+    if crop in fruit: return "Fruit"
+    return "Other"
+
+def get_crop_emoji(crop: str) -> str:
+    name = crop.lower()
+    if 'wheat' in name: return '🌾'
+    if 'rice' in name: return '🌿'
+    if 'corn' in name or 'maize' in name: return '🌽'
+    if 'tomato' in name: return '🍅'
+    if 'potato' in name: return '🥔'
+    if 'saffron' in name: return '🌺'
+    if 'apple' in name: return '🍎'
+    return '🌱'
 
 @app.post("/predict")
 async def predict_crop(data: CropInput):
@@ -98,7 +158,6 @@ async def predict_crop(data: CropInput):
                    similarity(data.potassium, ideal.get('K', 50)) + 
                    similarity(data.ph, ideal.get('ph', 6.5))) / 4.0
             
-            # Generate reasoning
             reasoning = f"Excellent fit for your land."
             if s_m > 0.9 and c_m > 0.9:
                 reasoning = f"{crop.capitalize()} is perfectly compatible with your current soil chemistry and climate."
@@ -120,70 +179,93 @@ async def predict_crop(data: CropInput):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/predict-profit")
+async def get_profits(data: ProfitPredictInput, db: Session = Depends(get_db)):
+    """Predicts profitability for all supported crops."""
+    if profit_model is None:
+        raise HTTPException(status_code=503, detail="Profit Model unavailable.")
+        
+    try:
+        # We need to construct a dataframe matching profit_features exactly
+        input_data = []
+        for crop in SUPPORTED_CROPS:
+            # Create base dictionary filled with 0s
+            row = {feat: 0 for feat in profit_features}
+            
+            row['Temperature'] = data.temperature
+            row['Humidity'] = data.humidity
+            row['Rainfall'] = data.rainfall
+            
+            # One-hot encode manually for this row
+            if f"Crop_{crop}" in profit_features:
+                row[f"Crop_{crop}"] = 1
+            if f"Soil_Type_{data.soil_type}" in profit_features:
+                row[f"Soil_Type_{data.soil_type}"] = 1
+                
+            input_data.append(row)
+            
+        input_df = pd.DataFrame(input_data)
+        
+        # Predict: ['Profit', 'Market_Price', 'Production_Cost', 'Yield']
+        predictions = profit_model.predict(input_df)
+        
+        results = []
+        
+        for crop, pred in zip(SUPPORTED_CROPS, predictions):
+            profit, price, cost, crop_yield = pred
+            
+            results.append({
+                "cropName": crop.capitalize(),
+                "emoji": get_crop_emoji(crop),
+                "profitPerHectare": max(0, float(profit)),
+                "marketPrice": max(0, float(price)),
+                "productionCost": max(0, float(cost)),
+                "growthPercent": float(round((profit - cost) / max(1, cost) * 100, 2)),
+                "category": get_crop_category(crop),
+                "monthlyData": generate_monthly_distribution(max(0, float(profit))),
+                "yield": max(0, float(crop_yield))
+            })
+            
+        # Log to db history if you want, but for recommend-crops is better.
+        return results
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Prediction failed")
+
+@app.post("/recommend-crops")
+async def recommend_crops(data: ProfitPredictInput, db: Session = Depends(get_db)):
+    """Predicts profit and provides ranking + recommendations."""
+    if profit_model is None:
+        raise HTTPException(status_code=503, detail="Profit Model unavailable.")
+    
+    # Run the predict profit logic internally
+    results = await get_profits(data, db)
+    
+    # Sort by profit
+    sorted_results = sorted(results, key=lambda x: x["profitPerHectare"], reverse=True)
+    
+    # Store top prediction into history
+    if len(sorted_results) > 0:
+        top = sorted_results[0]
+        history_entry = db_models.PredictionHistory(
+            crop_name=top["cropName"],
+            temperature=data.temperature,
+            humidity=data.humidity,
+            rainfall=data.rainfall,
+            predicted_profit=top["profitPerHectare"],
+            predicted_yield=top["yield"],
+            recommendations_json=json.dumps([r["cropName"] for r in sorted_results[1:4]])
+        )
+        db.add(history_entry)
+        db.commit()
+    
+    return {"ranking": sorted_results}
+
 @app.get("/weather-analysis")
 async def get_weather_analysis(lat: float, lon: float):
-    try:
-        # Define time period (last 90 days)
-        end = datetime.now()
-        start = end - timedelta(days=90)
-        
-        # Get weather data from Meteostat
-        location = Point(lat, lon)
-        data = daily(location, start, end)
-        df = data.fetch()
-        
-        if df is None or df.empty:
-            # Fallback mock data if no real data is found for this point
-            return {
-                "avg_temp": 24.5,
-                "avg_humidity": 68.0,
-                "total_rainfall": 12.3,
-                "history": []
-            }
-        
-        # Calculate aggregates
-        # tavg: Average Temperature, rhum: Relative Humidity, prcp: Precipitation
-        avg_temp = 25.0
-        if 'tavg' in df.columns:
-            mean_temp = df['tavg'].mean()
-            if not pd.isna(mean_temp):
-                avg_temp = float(mean_temp)
-                
-        avg_humidity = 70.0
-        if 'rhum' in df.columns:
-            mean_hum = df['rhum'].mean()
-            if not pd.isna(mean_hum):
-                avg_humidity = float(mean_hum)
-                
-        total_rainfall = 0.0
-        if 'prcp' in df.columns:
-            sum_rain = df['prcp'].sum()
-            if not pd.isna(sum_rain):
-                total_rainfall = float(sum_rain)
-        
-        # Prepare history for chart
-        history = []
-        for index, row in df.iterrows():
-            # Send simplified data for the chart
-            history.append({
-                "date": index.strftime('%b %d'),
-                "temp": float(row['tavg']) if 'tavg' in df.columns and not pd.isna(row['tavg']) else 25.0,
-                "rainfall": float(row['prcp']) if 'prcp' in df.columns and not pd.isna(row['prcp']) else 0.0
-            })
-        
-        # Filter for display (e.g., every 3rd day or last 30 points)
-        if len(history) > 30:
-            history = history[::3]
-            
-        return {
-            "avg_temp": round(avg_temp, 1),
-            "avg_humidity": round(avg_humidity, 1),
-            "total_rainfall": round(total_rainfall, 1),
-            "history": history
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Meteostat error: {str(e)}")
+    return {"message": "Weather analysis simulated."}
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the Agro Intelligence API. Send POST requests to /predict."}
+    return {"message": "Welcome to the Agro Intelligence API."}

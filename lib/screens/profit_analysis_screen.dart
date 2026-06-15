@@ -44,12 +44,27 @@ class _ProfitAnalysisScreenState extends State<ProfitAnalysisScreen>
   }
 
   Future<void> _loadData() async {
-    final crops = await AgroService.fetchCropProfits();
-    if (mounted) {
-      setState(() {
-        _allCrops = crops;
-        _loading = false;
-      });
+    try {
+      final crops = await AgroService.fetchCropProfits();
+      if (mounted) {
+        setState(() {
+          _allCrops = crops;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppTheme.accentRed,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
